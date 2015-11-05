@@ -10,6 +10,7 @@
   },
   "dependencies": {},
   "engine": "node >= 0.10",
+  "main": "dist/js/materialize.min.js",
   "devDependencies": {
     "grunt": "^0.4.5",
     "grunt-banner": "^0.3.0",
