@@ -16,6 +16,7 @@
     "node-archiver": "^0.2.0"
   },
   "engine": "node >= 0.10",
+  "main": "dist/js/materialize.min.js",
   "devDependencies": {
     "autoprefixer": "^6.1.0",
     "grunt": "^0.4.5",
