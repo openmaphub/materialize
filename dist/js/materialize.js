@@ -1,3 +1,8 @@
+/*!
+ * Materialize vundefined (http://materializecss.com)
+ * Copyright 2014-2015 Materialize
+ * MIT License (https://raw.githubusercontent.com/Dogfalo/materialize/master/LICENSE)
+ */
 /*
  * jQuery Easing v1.3 - http://gsgd.co.uk/sandbox/jquery/easing/
  *
@@ -247,7 +252,8 @@ jQuery.extend( jQuery.easing,
         };
     })(Hammer.Manager.prototype.emit);
 }));
-;(function(window){
+;// Required for Meteor package, the use of window prevents export by Meteor
+(function(window){
   if(window.Package){
     Materialize = {};
   } else {
@@ -451,6 +457,7 @@ else {
     this.each(function(){
     var origin = $(this);
     var options = $.extend({}, defaults, option);
+    var isFocused = false;
 
     // Dropdown menu
     var activates = $("#"+ origin.attr('data-activates'));
@@ -481,59 +488,71 @@ else {
       Helper function to position and resize dropdown.
       Used in hover and click handler.
     */
-    function placeDropdown() {
+    function placeDropdown(eventType) {
+      // Check for simultaneous focus and click events.
+      if (eventType === 'focus') {
+        isFocused = true;
+      }
+
       // Check html data attributes
       updateOptions();
 
       // Set Dropdown state
       activates.addClass('active');
+      origin.addClass('active');
 
       // Constrain width
       if (options.constrain_width === true) {
         activates.css('width', origin.outerWidth());
-      }
-      else {
+
+      } else {
         activates.css('white-space', 'nowrap');
       }
-      var offset = 0;
+
+      // Below Origin
+      var verticalOffset = 0;
       if (options.belowOrigin === true) {
-        offset = origin.height();
+        verticalOffset = origin.height();
       }
 
       // Offscreen detection
       var offsetLeft = origin.offset().left;
-      var activatesLeft, width_difference, gutter_spacing;
+      var offsetTop = origin.offset().top - $(window).scrollTop();
+      var currAlignment = options.alignment;
+      var activatesLeft, gutterSpacing;
       if (offsetLeft + activates.innerWidth() > $(window).width()) {
-        options.alignment = 'right';
+        // Dropdown goes past screen on right, force right alignment
+        currAlignment = 'right';
+
+      } else if (offsetLeft - activates.innerWidth() + origin.innerWidth() < 0) {
+        // Dropdown goes past screen on left, force left alignment
+        currAlignment = 'left';
       }
-      else if (offsetLeft - activates.innerWidth() + origin.innerWidth() < 0) {
-        options.alignment = 'left';
+      // Vertical bottom offscreen detection
+      if (offsetTop + activates.innerHeight() > window.innerHeight) {
+        if (!verticalOffset) {
+          verticalOffset += origin.innerHeight();
+        }
+        verticalOffset -= activates.innerHeight();
       }
 
       // Handle edge alignment
-      if (options.alignment === 'left') {
-        width_difference = 0;
-        gutter_spacing = options.gutter;
-        activatesLeft = origin.position().left + width_difference + gutter_spacing;
-
-        // Position dropdown
-        activates.css({ left: activatesLeft });
+      if (currAlignment === 'left') {
+        gutterSpacing = options.gutter;
+        leftPosition = origin.position().left + gutterSpacing;
       }
-      else if (options.alignment === 'right') {
-        var offsetRight = $(window).width() - offsetLeft - origin.innerWidth();
-        width_difference = 0;
-        gutter_spacing = options.gutter;
-        activatesLeft =  ( $(window).width() - origin.position().left - origin.innerWidth() ) + gutter_spacing;
-
-        // Position dropdown
-        activates.css({ right: activatesLeft });
+      else if (currAlignment === 'right') {
+        var offsetRight = origin.position().left + origin.outerWidth() - activates.outerWidth();
+        gutterSpacing = -options.gutter;
+        leftPosition =  offsetRight + gutterSpacing;
       }
+
       // Position dropdown
       activates.css({
         position: 'absolute',
-        top: origin.position().top + offset,
+        top: origin.position().top + verticalOffset,
+        left: leftPosition
       });
-
 
 
       // Show dropdown
@@ -550,8 +569,11 @@ else {
     }
 
     function hideDropdown() {
+      // Check for simultaneous focus and click events.
+      isFocused = false;
       activates.fadeOut(options.outDuration);
       activates.removeClass('active');
+      origin.removeClass('active');
     }
 
     // Hover
@@ -586,38 +608,39 @@ else {
 
     // Click
     } else {
-
       // Click handler to show dropdown
       origin.unbind('click.' + origin.attr('id'));
       origin.bind('click.'+origin.attr('id'), function(e){
-
-        if ( origin[0] == e.currentTarget && ($(e.target).closest('.dropdown-content').length === 0) ) {
-          e.preventDefault(); // Prevents button click from moving window
-          placeDropdown();
-
-        }
-        // If origin is clicked and menu is open, close menu
-        else {
-          if (origin.hasClass('active')) {
-            hideDropdown();
-            $(document).unbind('click.' + activates.attr('id'));
+        if (!isFocused) {
+          if ( origin[0] == e.currentTarget &&
+               !origin.hasClass('active') &&
+               ($(e.target).closest('.dropdown-content').length === 0)) {
+            e.preventDefault(); // Prevents button click from moving window
+            placeDropdown('click');
           }
-        }
-        // If menu open, add click close handler to document
-        if (activates.hasClass('active')) {
-          $(document).bind('click.'+ activates.attr('id'), function (e) {
-            if (!activates.is(e.target) && !origin.is(e.target) && (!origin.find(e.target).length > 0) ) {
-              hideDropdown();
-              $(document).unbind('click.' + activates.attr('id'));
-            }
-          });
+          // If origin is clicked and menu is open, close menu
+          else if (origin.hasClass('active')) {
+            hideDropdown();
+            $(document).unbind('click.'+ activates.attr('id') + ' touchstart.' + activates.attr('id'));
+          }
+          // If menu open, add click close handler to document
+          if (activates.hasClass('active')) {
+            $(document).bind('click.'+ activates.attr('id') + ' touchstart.' + activates.attr('id'), function (e) {
+              if (!activates.is(e.target) && !origin.is(e.target) && (!origin.find(e.target).length) ) {
+                hideDropdown();
+                $(document).unbind('click.'+ activates.attr('id') + ' touchstart.' + activates.attr('id'));
+              }
+            });
+          }
         }
       });
 
     } // End else
 
     // Listen to open and close event - useful for select component
-    origin.on('open', placeDropdown);
+    origin.on('open', function(e, eventType) {
+      placeDropdown(eventType);
+    });
     origin.on('close', hideDropdown);
 
 
@@ -627,8 +650,7 @@ else {
   $(document).ready(function(){
     $('.dropdown-button').dropdown();
   });
-}( jQuery ));
-;(function($) {
+}( jQuery ));;(function($) {
     var _stack = 0,
     _lastID = 0,
     _generateID = function() {
@@ -826,6 +848,8 @@ else {
       var placeholder = $('<div></div>').addClass('material-placeholder');
       var originalWidth = 0;
       var originalHeight = 0;
+      var ancestorsChanged;
+      var ancestor;
       origin.wrap(placeholder);
 
 
@@ -854,7 +878,6 @@ else {
         overlayActive = true;
 
         // Set positioning for placeholder
-
         placeholder.css({
           width: placeholder[0].getBoundingClientRect().width,
           height: placeholder[0].getBoundingClientRect().height,
@@ -863,7 +886,23 @@ else {
           left: 0
         });
 
-
+        // Find ancestor with overflow: hidden; and remove it
+        ancestorsChanged = undefined;
+        ancestor = placeholder[0].parentNode;
+        var count = 0;
+        while (ancestor !== null && !$(ancestor).is(document)) {
+          var curr = $(ancestor);
+          if (curr.css('overflow') === 'hidden') {
+            curr.css('overflow', 'visible');
+            if (ancestorsChanged === undefined) {
+              ancestorsChanged = curr;
+            }
+            else {
+              ancestorsChanged = ancestorsChanged.add(curr);
+            }
+          }
+          ancestor = ancestor.parentNode;
+        }
 
         // Set css on origin
         origin.css({position: 'absolute', 'z-index': 1000})
@@ -1043,6 +1082,9 @@ else {
               origin.removeClass('active');
               doneAnimating = true;
               $(this).remove();
+
+              // Remove overflow overrides on ancestors
+              ancestorsChanged.css('overflow', '');
             }
           });
 
@@ -1127,6 +1169,7 @@ $(document).ready(function(){
       var $active, $content, $links = $this.find('li.tab a'),
           $tabs_width = $this.width(),
           $tab_width = $this.find('li').first().outerWidth(),
+          $tab_min_width = parseInt($this.find('li').first().css('minWidth')),
           $index = 0;
 
       // If the location.hash matches one of the links, use that as the active tab.
@@ -1174,7 +1217,7 @@ $(document).ready(function(){
 
 
       // Bind the click event handler
-      $this.on('click', 'a', function(e){
+      $this.on('click', 'a', function(e) {
         if ($(this).parent().hasClass('disabled')) {
           e.preventDefault();
           return;
@@ -1218,6 +1261,24 @@ $(document).ready(function(){
         // Prevent the anchor's default click action
         e.preventDefault();
       });
+
+      // Add scroll for small screens
+      if ($tab_width <= $tab_min_width) {
+        $this.wrap('<div class="hide-tab-scrollbar"></div>');
+
+        // Create the measurement node
+        var scrollDiv = document.createElement("div");
+        scrollDiv.className = "scrollbar-measure";
+        document.body.appendChild(scrollDiv);
+        var scrollbarHeight = scrollDiv.offsetHeight - scrollDiv.clientHeight;
+        document.body.removeChild(scrollDiv);
+
+        if (scrollbarHeight === 0) {
+          scrollbarHeight = 15;
+          $this.find('.indicator').css('bottom', scrollbarHeight);
+        }
+        $this.height($(this).height() + scrollbarHeight);
+      }
     });
 
     },
@@ -1310,28 +1371,28 @@ $(document).ready(function(){
               var tooltipVerticalMovement = '0px';
               var tooltipHorizontalMovement = '0px';
               var scale_factor = 8;
+              var targetTop, targetLeft, newCoordinates;
 
               if (tooltipPosition === "top") {
-              // Top Position
-              newTooltip.css({
-                top: origin.offset().top - tooltipHeight - margin,
-                left: origin.offset().left + originWidth/2 - tooltipWidth/2
-              });
-              tooltipVerticalMovement = '-10px';
-              backdrop.css({
-                borderRadius: '14px 14px 0 0',
-                transformOrigin: '50% 90%',
-                marginTop: tooltipHeight,
-                marginLeft: (tooltipWidth/2) - (backdrop.width()/2)
+                // Top Position
+                targetTop = origin.offset().top - tooltipHeight - margin;
+                targetLeft = origin.offset().left + originWidth/2 - tooltipWidth/2;
+                newCoordinates = repositionWithinScreen(targetLeft, targetTop, tooltipWidth, tooltipHeight);
 
-              });
+                tooltipVerticalMovement = '-10px';
+                backdrop.css({
+                  borderRadius: '14px 14px 0 0',
+                  transformOrigin: '50% 90%',
+                  marginTop: tooltipHeight,
+                  marginLeft: (tooltipWidth/2) - (backdrop.width()/2)
+                });
               }
               // Left Position
               else if (tooltipPosition === "left") {
-                newTooltip.css({
-                  top: origin.offset().top + originHeight/2 - tooltipHeight/2,
-                  left: origin.offset().left - tooltipWidth - margin
-                });
+                targetTop = origin.offset().top + originHeight/2 - tooltipHeight/2;
+                targetLeft =  origin.offset().left - tooltipWidth - margin;
+                newCoordinates = repositionWithinScreen(targetLeft, targetTop, tooltipWidth, tooltipHeight);
+
                 tooltipHorizontalMovement = '-10px';
                 backdrop.css({
                   width: '14px',
@@ -1344,10 +1405,10 @@ $(document).ready(function(){
               }
               // Right Position
               else if (tooltipPosition === "right") {
-                newTooltip.css({
-                  top: origin.offset().top + originHeight/2 - tooltipHeight/2,
-                  left: origin.offset().left + originWidth + margin
-                });
+                targetTop = origin.offset().top + originHeight/2 - tooltipHeight/2;
+                targetLeft = origin.offset().left + originWidth + margin;
+                newCoordinates = repositionWithinScreen(targetLeft, targetTop, tooltipWidth, tooltipHeight);
+
                 tooltipHorizontalMovement = '+10px';
                 backdrop.css({
                   width: '14px',
@@ -1360,15 +1421,20 @@ $(document).ready(function(){
               }
               else {
                 // Bottom Position
-                newTooltip.css({
-                  top: origin.offset().top + origin.outerHeight() + margin,
-                  left: origin.offset().left + originWidth/2 - tooltipWidth/2
-                });
+                targetTop = origin.offset().top + origin.outerHeight() + margin;
+                targetLeft = origin.offset().left + originWidth/2 - tooltipWidth/2;
+                newCoordinates = repositionWithinScreen(targetLeft, targetTop, tooltipWidth, tooltipHeight);
                 tooltipVerticalMovement = '+10px';
                 backdrop.css({
                   marginLeft: (tooltipWidth/2) - (backdrop.width()/2)
                 });
               }
+
+              // Set tooptip css placement
+              newTooltip.css({
+                top: newCoordinates.y,
+                left: newCoordinates.x
+              });
 
               // Calculate Scale to fill
               scale_factor = tooltipWidth / 8;
@@ -1412,6 +1478,25 @@ $(document).ready(function(){
         }
         });
     });
+  };
+
+  var repositionWithinScreen = function(x, y, width, height) {
+    var newX = x
+    var newY = y;
+
+    if (newX < 0) {
+      newX = 4;
+    } else if (newX + width > window.innerWidth) {
+      newX -= newX + width - window.innerWidth;
+    }
+
+    if (newY < 0) {
+      newY = 4;
+    } else if (newY + height > window.innerHeight + $(window).scrollTop) {
+      newY -= newY + height - window.innerHeight;
+    }
+
+    return {x: newX, y: newY};
   };
 
   $(document).ready(function(){
@@ -1840,7 +1925,7 @@ $(document).ready(function(){
         }
         else {
           // Insert as text;
-          toast.innerHTML = html;
+          toast.innerHTML = html; 
         }
         // Bind hammer
         var hammerHandler = new Hammer(toast, {prevent_default: false});
@@ -2149,7 +2234,7 @@ $(document).ready(function(){
               $('body').css('overflow', 'hidden');
               // Push current drag target on top of DOM tree
               $('body').append(dragTarget);
-
+              
               if (options.edge === 'left') {
                 dragTarget.css({width: '50%', right: 0, left: ''});
                 menu_id.velocity({left: 0}, {duration: 300, queue: false, easing: 'easeOutQuad'});
@@ -2390,9 +2475,9 @@ $(document).ready(function(){
 		    var offset = $(this.hash).offset().top + 1;
 
 //          offset - 200 allows elements near bottom of page to scroll
-
+			
 	    	$('html, body').animate({ scrollTop: offset - 200 }, {duration: 400, queue: false, easing: 'easeOutCubic'});
-
+			
 		  });
 		});
 		options = options || {
@@ -2679,6 +2764,7 @@ $(document).ready(function(){
 
     $(document).on('input mousedown touchstart', range_type, function(e) {
       var thumb = $(this).siblings('.thumb');
+      var width = $(this).outerWidth();
 
       // If thumb indicator does not exist yet, create it
       if (thumb.length <= 0) {
@@ -2696,21 +2782,22 @@ $(document).ready(function(){
         thumb.velocity({ height: "30px", width: "30px", top: "-20px", marginLeft: "-15px"}, { duration: 300, easing: 'easeOutExpo' });
       }
 
-      if(e.pageX === undefined || e.pageX === null){//mobile
-         left = e.originalEvent.touches[0].pageX - $(this).offset().left;
+      if (e.type !== 'input') {
+        if(e.pageX === undefined || e.pageX === null){//mobile
+           left = e.originalEvent.touches[0].pageX - $(this).offset().left;
+        }
+        else{ // desktop
+           left = e.pageX - $(this).offset().left;
+        }
+        if (left < 0) {
+          left = 0;
+        }
+        else if (left > width) {
+          left = width;
+        }
+        thumb.addClass('active').css('left', left);
       }
-      else{ // desktop
-         left = e.pageX - $(this).offset().left;
-      }
-      var width = $(this).outerWidth();
 
-      if (left < 0) {
-        left = 0;
-      }
-      else if (left > width) {
-        left = width;
-      }
-      thumb.addClass('active').css('left', left);
       thumb.find('.value').html($(this).val());
 
 
@@ -2767,14 +2854,15 @@ $(document).ready(function(){
   // Select Plugin
   $.fn.material_select = function (callback) {
     $(this).each(function(){
-      $select = $(this);
+      var $select = $(this);
 
-      if ( $select.hasClass('browser-default')) {
+      if ($select.hasClass('browser-default')) {
         return; // Continue to next (return false breaks out of entire loop)
       }
 
-      // Tear down structure if Select needs to be rebuilt
-      var lastID = $select.data('select-id');
+      var multiple = $select.attr('multiple') ? true : false,
+          lastID = $select.data('select-id'); // Tear down structure if Select needs to be rebuilt
+
       if (lastID) {
         $select.parent().find('span.caret').remove();
         $select.parent().find('input').remove();
@@ -2785,57 +2873,88 @@ $(document).ready(function(){
 
       // If destroying the select, remove the selelct-id and reset it to it's uninitialized state.
       if(callback === 'destroy') {
-          $select.data('select-id', null).removeClass('initialized');
-          return;
+        $select.data('select-id', null).removeClass('initialized');
+        return;
       }
 
       var uniqueID = Materialize.guid();
       $select.data('select-id', uniqueID);
       var wrapper = $('<div class="select-wrapper"></div>');
       wrapper.addClass($select.attr('class'));
-      var options = $('<ul id="select-options-' + uniqueID+'" class="dropdown-content select-dropdown"></ul>');
+      var options = $('<ul id="select-options-' + uniqueID +'" class="dropdown-content select-dropdown ' + (multiple ? 'multiple-select-dropdown' : '') + '"></ul>');
       var selectOptions = $select.children('option');
+      var selectOptGroups = $select.children('optgroup');
 
-      var label;
-      if ($select.find('option:selected') !== undefined) {
+      var valuesSelected = [],
+          optionsHover = false;
+
+      if ($select.find('option:selected').length > 0) {
         label = $select.find('option:selected');
+      } else {
+        label = selectOptions.first();
       }
-      else {
-        label = options.first();
+
+      /* Create dropdown structure. */
+      if (selectOptGroups.length) {
+        // Check for optgroup
+        selectOptGroups.each(function() {
+          selectOptions = $(this).children('option');
+          options.append($('<li class="optgroup"><span>' + $(this).attr('label') + '</span></li>'));
+          selectOptions.each(function() {
+            var disabledClass = ($(this).is(':disabled')) ? 'disabled ' : '';
+            options.append($('<li class="' + disabledClass + '"><span>' + $(this).html() + '</span></li>'));
+          });
+        });
+
+      } else {
+        selectOptions.each(function () {
+          // Add disabled attr if disabled
+          var disabledClass = ($(this).is(':disabled')) ? 'disabled ' : '';
+          if (multiple) {
+            options.append($('<li class="' + disabledClass + '"><span><input type="checkbox"' + disabledClass + '/><label></label>' + $(this).html() + '</span></li>'));
+          } else {
+            options.append($('<li class="' + disabledClass + '"><span>' + $(this).html() + '</span></li>'));
+          }
+        });
       }
 
 
-      // Create Dropdown structure
-      selectOptions.each(function () {
-        // Add disabled attr if disabled
-        options.append($('<li class="' + (($(this).is(':disabled')) ? 'disabled' : '') + '"><span>' + $(this).html() + '</span></li>'));
-      });
-
-
-      options.find('li').each(function (i) {
+      options.find('li:not(.optgroup)').each(function (i) {
         var $curr_select = $select;
-        $(this).click(function () {
+        $(this).click(function (e) {
           // Check if option element is disabled
-          if (!$(this).hasClass('disabled')) {
+          if (!$(this).hasClass('disabled') && !$(this).hasClass('optgroup')) {
+            if (multiple) {
+              $('input[type="checkbox"]', this).prop('checked', function(i, v) { return !v; });
+              toggleEntryFromArray(valuesSelected, $(this).index(), $curr_select);
+              $newSelect.trigger('focus');
+
+            } else {
+              options.find('li').removeClass('active');
+              $(this).toggleClass('active');
+              $curr_select.siblings('input.select-dropdown').val($(this).text());
+            }
+
+            activateOption(options, $(this));
             $curr_select.find('option').eq(i).prop('selected', true);
             // Trigger onchange() event
             $curr_select.trigger('change');
-            $curr_select.siblings('input.select-dropdown').val($(this).text());
             if (typeof callback !== 'undefined') callback();
           }
-        });
 
+          e.stopPropagation();
+        });
       });
 
       // Wrap Elements
       $select.wrap(wrapper);
       // Add Select Display Element
       var dropdownIcon = $('<span class="caret">&#9660;</span>');
-      if ( $select.is(':disabled') )
+      if ($select.is(':disabled'))
         dropdownIcon.addClass('disabled');
 
       // escape double quotes
-      var sanitizedLabelHtml = label.html().replace(/"/g, '&quot;');
+      var sanitizedLabelHtml = label.html() && label.html().replace(/"/g, '&quot;');
 
       var $newSelect = $('<input type="text" class="select-dropdown" readonly="true" ' + (($select.is(':disabled')) ? 'disabled' : '') + ' data-activates="select-options-' + uniqueID +'" value="'+ sanitizedLabelHtml +'"/>');
       $select.before($newSelect);
@@ -2844,7 +2963,7 @@ $(document).ready(function(){
       $('body').append(options);
       // Check if section element is disabled
       if (!$select.is(':disabled')) {
-        $newSelect.dropdown({"hover": false});
+        $newSelect.dropdown({'hover': false, 'closeOnClick': false});
       }
 
       // Copy tabindex
@@ -2854,103 +2973,158 @@ $(document).ready(function(){
 
       $select.addClass('initialized');
 
-      $newSelect.on('focus', function(){
-        $(this).trigger('open', ['focus']);
-        label = $(this).val();
-        selectedOption = options.find('li').filter(function() {
-          return $(this).text().toLowerCase() === label.toLowerCase();
-        })[0];
-        activateOption(options, selectedOption);
+      $newSelect.on({
+        'focus': function (){
+          if ($('ul.select-dropdown').not(options[0]).is(':visible')) {
+            $('input.select-dropdown').trigger('close');
+          }
+          if (!options.is(':visible')) {
+            $(this).trigger('open', ['focus']);
+            var label = $(this).val();
+            var selectedOption = options.find('li').filter(function() {
+              return $(this).text().toLowerCase() === label.toLowerCase();
+            })[0];
+            activateOption(options, selectedOption);
+          }
+        },
+        'click': function (e){
+          e.stopPropagation();
+        }
       });
 
-      $newSelect.on('blur', function(){
-        $(this).trigger('close');
+      $newSelect.on('blur', function() {
+        if (!multiple) {
+          $(this).trigger('close');
+        }
+        options.find('li.selected').removeClass('selected');
+      });
+
+      options.hover(function() {
+        optionsHover = true;
+      }, function () {
+        optionsHover = false;
+      });
+
+      $(window).on({
+        'click': function (e){
+          multiple && (optionsHover || $newSelect.trigger('close'));
+        }
       });
 
       // Make option as selected and scroll to selected position
       activateOption = function(collection, newOption) {
-        collection.find('li.active').removeClass('active');
-        $(newOption).addClass('active');
-        collection.scrollTo(newOption);
+        collection.find('li.selected').removeClass('selected');
+        $(newOption).addClass('selected');
       };
 
       // Allow user to search by typing
       // this array is cleared after 1 second
-      filterQuery = [];
+      var filterQuery = [],
+          onKeyDown = function(e){
+            // TAB - switch to another input
+            if(e.which == 9){
+              $newSelect.trigger('close');
+              return;
+            }
 
-      onKeyDown = function(event){
-        // TAB - switch to another input
-        if(event.which == 9){
-          $newSelect.trigger('close');
-          return;
-        }
+            // ARROW DOWN WHEN SELECT IS CLOSED - open select options
+            if(e.which == 40 && !options.is(':visible')){
+              $newSelect.trigger('open');
+              return;
+            }
 
-        // ARROW DOWN WHEN SELECT IS CLOSED - open select options
-        if(event.which == 40 && !options.is(":visible")){
-          $newSelect.trigger('open');
-          return;
-        }
+            // ENTER WHEN SELECT IS CLOSED - submit form
+            if(e.which == 13 && !options.is(':visible')){
+              return;
+            }
 
-        // ENTER WHEN SELECT IS CLOSED - submit form
-        if(event.which == 13 && !options.is(":visible")){
-          return;
-        }
+            e.preventDefault();
 
-        event.preventDefault();
+            // CASE WHEN USER TYPE LETTERS
+            var letter = String.fromCharCode(e.which).toLowerCase(),
+                nonLetters = [9,13,27,38,40];
+            if (letter && (nonLetters.indexOf(e.which) === -1)) {
+              filterQuery.push(letter);
 
-        // CASE WHEN USER TYPE LETTERS
-        letter = String.fromCharCode(event.which).toLowerCase();
-        var nonLetters = [9,13,27,38,40];
-        if (letter && (nonLetters.indexOf(event.which) === -1)){
-          filterQuery.push(letter);
+              var string = filterQuery.join(''),
+                  newOption = options.find('li').filter(function() {
+                    return $(this).text().toLowerCase().indexOf(string) === 0;
+                  })[0];
 
-          string = filterQuery.join("");
+              if (newOption) {
+                activateOption(options, newOption);
+              }
+            }
 
-          newOption = options.find('li').filter(function() {
-            return $(this).text().toLowerCase().indexOf(string) === 0;
-          })[0];
+            // ENTER - select option and close when select options are opened
+            if (e.which == 13) {
+              var activeOption = options.find('li.selected:not(.disabled)')[0];
+              if(activeOption){
+                $(activeOption).trigger('click');
+                if (!multiple) {
+                  $newSelect.trigger('close');
+                }
+              }
+            }
 
-          if(newOption){
-            activateOption(options, newOption);
-          }
-        }
+            // ARROW DOWN - move to next not disabled option
+            if (e.which == 40) {
+              if (options.find('li.selected').length) {
+                newOption = options.find('li.selected').next('li:not(.disabled)')[0];
+              } else {
+                newOption = options.find('li:not(.disabled)')[0];
+              }
+              activateOption(options, newOption);
+            }
 
-        // ENTER - select option and close when select options are opened
-        if(event.which == 13){
-          activeOption = options.find('li.active:not(.disabled)')[0];
-          if(activeOption){
-            $(activeOption).trigger('click');
-            $newSelect.trigger('close');
-          }
-        }
+            // ESC - close options
+            if (e.which == 27) {
+              $newSelect.trigger('close');
+            }
 
-        // ARROW DOWN - move to next not disabled option
-        if(event.which == 40){
-          newOption = options.find('li.active').next('li:not(.disabled)')[0];
-          if(newOption){
-            activateOption(options, newOption);
-          }
-        }
+            // ARROW UP - move to previous not disabled option
+            if (e.which == 38) {
+              newOption = options.find('li.selected').prev('li:not(.disabled)')[0];
+              if(newOption)
+                activateOption(options, newOption);
+            }
 
-        // ESC - close options
-        if(event.which == 27){
-          $newSelect.trigger('close');
-        }
-
-        // ARROW UP - move to previous not disabled option
-        if(event.which == 38){
-          newOption = options.find('li.active').prev('li:not(.disabled)')[0];
-          if(newOption){
-            activateOption(options, newOption);
-          }
-        }
-
-        // Automaticaly clean filter query so user can search again by starting letters
-        setTimeout(function(){ filterQuery = []; }, 1000);
-      };
+            // Automaticaly clean filter query so user can search again by starting letters
+            setTimeout(function(){ filterQuery = []; }, 1000);
+          };
 
       $newSelect.on('keydown', onKeyDown);
     });
+
+    function toggleEntryFromArray(entriesArray, entryIndex, select) {
+      var index = entriesArray.indexOf(entryIndex);
+
+      if (index === -1) {
+        entriesArray.push(entryIndex);
+      } else {
+        entriesArray.splice(index, 1);
+      }
+
+      select.siblings('ul.dropdown-content').find('li').eq(entryIndex).toggleClass('active');
+      select.find('option').eq(entryIndex).prop('selected', true);
+      setValueToInput(entriesArray, select);
+    }
+
+    function setValueToInput(entriesArray, select) {
+      var value = '';
+
+      for (var i = 0, count = entriesArray.length; i < count; i++) {
+        var text = select.find('option').eq(entriesArray[i]).text();
+
+        i === 0 ? value += text : value += ', ' + text;
+      }
+
+      if (value === '') {
+        value = select.find('option:disabled').eq(0).text();
+      }
+
+      select.siblings('input.select-dropdown').val(value);
+    }
   };
 
 }( jQuery ));
@@ -2975,7 +3149,7 @@ $(document).ready(function(){
         var $slider = $this.find('ul.slides').first();
         var $slides = $slider.find('li');
         var $active_index = $slider.find('.active').index();
-        var $active;
+        var $active, $indicators, $interval;
         if ($active_index != -1) { $active = $slides.eq($active_index); }
 
         // Transitions the caption depending on alignment
@@ -2993,6 +3167,7 @@ $(document).ready(function(){
 
         // This function will transition the slide to any index of the next slide
         function moveToSlide(index) {
+          // Wrap around indices.
           if (index >= $slides.length) index = 0;
           else if (index < 0) index = $slides.length -1;
 
@@ -3049,13 +3224,16 @@ $(document).ready(function(){
 
         // Move img src into background-image
         $slides.find('img').each(function () {
-          $(this).css('background-image', 'url(' + $(this).attr('src') + ')' );
-          $(this).attr('src', 'data:image/gif;base64,R0lGODlhAQABAIABAP///wAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==');
+          var placeholderBase64 = 'data:image/gif;base64,R0lGODlhAQABAIABAP///wAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
+          if ($(this).attr('src') !== placeholderBase64) {
+            $(this).css('background-image', 'url(' + $(this).attr('src') + ')' );
+            $(this).attr('src', placeholderBase64);
+          }
         });
 
         // dynamically add indicators
         if (options.indicators) {
-          var $indicators = $('<ul class="indicators"></ul>');
+          $indicators = $('<ul class="indicators"></ul>');
           $slides.each(function( index ) {
             var $indicator = $('<li class="indicator-item"></li>');
 
@@ -3230,6 +3408,16 @@ $(document).ready(function(){
           );
         });
 
+        $this.on('sliderNext', function() {
+          $active_index = $slider.find('.active').index();
+          moveToSlide($active_index + 1);
+        });
+
+        $this.on('sliderPrev', function() {
+          $active_index = $slider.find('.active').index();
+          moveToSlide($active_index - 1);
+        });
+
       });
 
 
@@ -3240,6 +3428,12 @@ $(document).ready(function(){
     },
     start : function() {
       $(this).trigger('sliderStart');
+    },
+    next : function() {
+      $(this).trigger('sliderNext');
+    },
+    prev : function() {
+      $(this).trigger('sliderPrev');
     }
   };
 
@@ -3272,6 +3466,7 @@ $(document).ready(function(){
         }
         else if ($(e.target).is($('.card .activator')) ||
                  $(e.target).is($('.card .activator i')) ) {
+          $(e.target).closest('.card').css('overflow', 'hidden');
           $(this).find('.card-reveal').css({ display: 'block'}).velocity("stop", false).velocity({translateY: '-100%'}, {duration: 300, queue: false, easing: 'easeInOutQuad'});
         }
       }
@@ -3355,15 +3550,25 @@ $(document).ready(function(){
     // jQuery reverse
     $.fn.reverse = [].reverse;
 
-    $(document).on('mouseenter.fixedActionBtn', '.fixed-action-btn', function(e) {
+    // Hover behaviour: make sure this doesn't work on .click-to-toggle FABs!
+    $(document).on('mouseenter.fixedActionBtn', '.fixed-action-btn:not(.click-to-toggle)', function(e) {
       var $this = $(this);
       openFABMenu($this);
-
     });
-
-    $(document).on('mouseleave.fixedActionBtn', '.fixed-action-btn', function(e) {
+    $(document).on('mouseleave.fixedActionBtn', '.fixed-action-btn:not(.click-to-toggle)', function(e) {
       var $this = $(this);
       closeFABMenu($this);
+    });
+
+    // Toggle-on-click behaviour.
+    $(document).on('click.fixedActionBtn', '.fixed-action-btn.click-to-toggle > a', function(e) {
+      var $this = $(this);
+      var $menu = $this.parent();
+      if ($menu.hasClass('active')) {
+        closeFABMenu($menu);
+      } else {
+        openFABMenu($menu);
+      }
     });
 
   });
@@ -3382,15 +3587,26 @@ $(document).ready(function(){
   var openFABMenu = function (btn) {
     $this = btn;
     if ($this.hasClass('active') === false) {
+
+      // Get direction option
+      var horizontal = $this.hasClass('horizontal');
+      var offsetY, offsetX;
+
+      if (horizontal === true) {
+        offsetX = 40;
+      } else {
+        offsetY = 40;
+      }
+
       $this.addClass('active');
       $this.find('ul .btn-floating').velocity(
-        { scaleY: ".4", scaleX: ".4", translateY: "40px"},
+        { scaleY: ".4", scaleX: ".4", translateY: offsetY + 'px', translateX: offsetX + 'px'},
         { duration: 0 });
 
       var time = 0;
-      $this.find('ul .btn-floating').reverse().each(function () {
+      $this.find('ul .btn-floating').reverse().each( function () {
         $(this).velocity(
-          { opacity: "1", scaleX: "1", scaleY: "1", translateY: "0"},
+          { opacity: "1", scaleX: "1", scaleY: "1", translateY: "0", translateX: '0'},
           { duration: 80, delay: time });
         time += 40;
       });
@@ -3399,11 +3615,21 @@ $(document).ready(function(){
 
   var closeFABMenu = function (btn) {
     $this = btn;
+    // Get direction option
+    var horizontal = $this.hasClass('horizontal');
+    var offsetY, offsetX;
+
+    if (horizontal === true) {
+      offsetX = 40;
+    } else {
+      offsetY = 40;
+    }
+
     $this.removeClass('active');
     var time = 0;
     $this.find('ul .btn-floating').velocity("stop", true);
     $this.find('ul .btn-floating').velocity(
-      { opacity: "0", scaleX: ".4", scaleY: ".4", translateY: "40px"},
+      { opacity: "0", scaleX: ".4", scaleY: ".4", translateY: offsetY + 'px', translateX: offsetX + 'px'},
       { duration: 80 }
     );
   };
